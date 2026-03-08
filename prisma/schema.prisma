@@ -1,0 +1,235 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FARMER
+  VENDOR
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum VendorStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DISPUTED
+  OVERDUE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id            String     @id @default(uuid()) @map("_id")
+  email         String     @unique
+  password      String
+  firstName     String
+  lastName      String
+  phone         String?
+  role          Role       @default(FARMER)
+  status        UserStatus @default(ACTIVE)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  vendorProfile VendorProfile?
+  bookings      Booking[]      @relation("FarmerBookings")
+  notifications Notification[]
+  reviews       Review[]       @relation("UserReviews")
+  sentMessages  Message[]      @relation("SentMessages")
+  receivedMessages Message[]    @relation("ReceivedMessages")
+  @@map("users")
+}
+
+model VendorProfile {
+  id               String       @id @default(uuid()) @map("_id")
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id])
+  businessName     String
+  businessAddress  String
+  kycDocumentUrl   String?
+  status           VendorStatus @default(PENDING_VERIFICATION)
+  commissionRate   Float        @default(0.10) // 10%
+  balance          Float        @default(0)
+  
+  equipment        Equipment[]
+  payouts          Payout[]
+  @@map("vendor_profiles")
+}
+
+model Category {
+  id          String      @id @default(uuid()) @map("_id")
+  name        String      @unique
+  description String?
+  equipment   Equipment[]
+  @@map("categories")
+}
+
+model Equipment {
+  id              String   @id @default(uuid()) @map("_id")
+  name            String
+  description     String
+  categoryId      String
+  category        Category @relation(fields: [categoryId], references: [id])
+  vendorId        String
+  vendor          VendorProfile @relation(fields: [vendorId], references: [id])
+  
+  pricePerDay     Float
+  pricePerWeek    Float?
+  deposit         Float
+  
+  location        String
+  latitude        Float?
+  longitude       Float?
+  
+  quantity        Int      @default(1)
+  condition       String
+  images          String[] // URLs
+  
+  isAvailable     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bookings        Booking[]
+  @@map("equipment")
+}
+
+model Booking {
+  id              String        @id @default(uuid()) @map("_id")
+  equipmentId     String
+  equipment       Equipment     @relation(fields: [equipmentId], references: [id])
+  farmerId        String
+  farmer          User          @relation("FarmerBookings", fields: [farmerId], references: [id])
+  
+  startDate       DateTime
+  endDate         DateTime
+  totalPrice      Float
+  depositAmount   Float
+  status          BookingStatus @default(PENDING)
+  
+  payment         Payment?
+  review          Review?
+  dispute         Dispute?
+  messages        Message[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  @@map("bookings")
+}
+
+model Payment {
+  id              String        @id @default(uuid()) @map("_id")
+  bookingId       String        @unique
+  booking         Booking       @relation(fields: [bookingId], references: [id])
+  amount          Float
+  transactionRef  String        @unique
+  provider        String        // e.g., "AIRTEL_MONEY", "TNM_MPAMBA"
+  status          PaymentStatus @default(PENDING)
+  
+  escrowTx        EscrowTransaction?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  @@map("payments")
+}
+
+model EscrowTransaction {
+  id              String   @id @default(uuid()) @map("_id")
+  paymentId       String   @unique
+  payment         Payment  @relation(fields: [paymentId], references: [id])
+  amount          Float
+  commission      Float
+  netAmount       Float // Amount for vendor
+  isReleased      Boolean  @default(false)
+  releasedAt      DateTime?
+  
+  createdAt       DateTime @default(now())
+  @@map("escrow_transactions")
+}
+
+model Payout {
+  id              String        @id @default(uuid()) @map("_id")
+  vendorId        String
+  vendor          VendorProfile @relation(fields: [vendorId], references: [id])
+  amount          Float
+  status          String        // e.g., "PENDING", "COMPLETED"
+  createdAt       DateTime      @default(now())
+  @@map("payouts")
+}
+
+model Review {
+  id              String   @id @default(uuid()) @map("_id")
+  bookingId       String   @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id])
+  userId          String
+  user            User     @relation("UserReviews", fields: [userId], references: [id])
+  rating          Int
+  comment         String?
+  createdAt       DateTime @default(now())
+  @@map("reviews")
+}
+
+model Notification {
+  id              String   @id @default(uuid()) @map("_id")
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  title           String
+  message         String
+  isRead          Boolean  @default(false)
+  type            String   // e.g., "BOOKING", "PAYMENT", "SYSTEM"
+  createdAt       DateTime @default(now())
+  @@map("notifications")
+}
+
+model Dispute {
+  id              String   @id @default(uuid()) @map("_id")
+  bookingId       String   @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id])
+  reason          String
+  description     String
+  status          String   @default("OPEN") // e.g., "OPEN", "RESOLVED", "CLOSED"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@map("disputes")
+}
+
+model Message {
+  id              String   @id @default(uuid()) @map("_id")
+  senderId        String
+  sender          User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId      String
+  receiver        User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  content         String
+  bookingId       String?
+  booking         Booking? @relation(fields: [bookingId], references: [id])
+  isRead          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@map("messages")
+}
