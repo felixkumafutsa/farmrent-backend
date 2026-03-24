@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('users')
 export class UsersController {
@@ -17,8 +19,23 @@ export class UsersController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   async create(@Body() createUserDto: any) {
+    return this.usersService.create(createUserDto);
+  }
+
+  @Post('admin/create')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async createUserWithRole(@Body() createUserDto: { 
+    email: string; 
+    password: string; 
+    firstName: string; 
+    lastName: string; 
+    role: 'FARMER' | 'VENDOR' | 'ADMIN';
+    phone?: string;
+  }) {
     return this.usersService.create(createUserDto);
   }
 
