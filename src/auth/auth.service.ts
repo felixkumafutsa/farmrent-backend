@@ -32,8 +32,18 @@ export class AuthService {
             },
         });
 
-        delete (user as any).password;
-        return user;
+        const tokens = await this.getTokens(user.id, user.email, user.role);
+        
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+            },
+            ...tokens,
+        };
     }
 
     async login(dto: LoginDto) {
