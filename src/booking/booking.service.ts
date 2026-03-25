@@ -205,8 +205,7 @@ export class BookingService {
         include: {
           equipment: {
             include: {
-              category: true,
-              vendor: true,
+              category: true, // Remove vendor to avoid null relationship errors
             },
           },
           farmer: true,
@@ -223,11 +222,7 @@ export class BookingService {
     const booking = await this.prisma.booking.findUnique({
       where: { id },
       include: { 
-        equipment: {
-          include: {
-            vendor: true,
-          },
-        },
+        equipment: true, // Only include equipment, not vendor
       },
     });
 
@@ -235,7 +230,8 @@ export class BookingService {
       throw new NotFoundException('Booking not found');
     }
 
-    if (booking.equipment.vendorId !== vendorId) {  // Use vendorId directly
+    // Check vendorId directly from equipment
+    if (booking.equipment.vendorId !== vendorId) {
       throw new BadRequestException('You can only confirm bookings for your equipment');
     }
 
@@ -249,8 +245,7 @@ export class BookingService {
       include: {
         equipment: {
           include: {
-            category: true,
-            vendor: true,
+            category: true, // Remove vendor to avoid null relationship errors
           },
         },
         farmer: true,
@@ -290,8 +285,7 @@ export class BookingService {
       include: {
         equipment: {
           include: {
-            category: true,
-            vendor: true,
+            category: true, // Remove vendor to avoid null relationship errors
           },
         },
         farmer: true,
