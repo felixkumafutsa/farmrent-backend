@@ -174,6 +174,16 @@ export class BookingService {
         equipment: {
           include: {
             category: true,
+            vendor: {
+              include: {
+                user: {
+                  select: {
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+              },
+            },
           },
         },
         farmer: true,
@@ -363,7 +373,15 @@ export class BookingService {
         name: booking.equipment.name,
         category: booking.equipment.category,
         images: booking.equipment.images,
-        vendorId: booking.equipment.vendorId, // Include vendorId for permissions
+        vendorId: booking.equipment.vendorId,
+        vendor: booking.equipment.vendor ? {
+          id: booking.equipment.vendor.id,
+          businessName: booking.equipment.vendor.businessName || 'Business Name',
+          user: booking.equipment.vendor.user || {
+            firstName: 'Unknown',
+            lastName: 'Vendor',
+          },
+        } : null,
       },
       farmer: {
         id: booking.farmer.id,

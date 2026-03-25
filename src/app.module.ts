@@ -13,6 +13,7 @@ import { EarningsModule } from './earnings/earnings.module';
 import { NotificationModule } from './notifications/notification.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { CategoriesModule } from './categories/categories.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CategoriesModule } from './categories/categories.module';
     NotificationModule,
     ReviewsModule,
     CategoriesModule,
+    PaymentModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],
