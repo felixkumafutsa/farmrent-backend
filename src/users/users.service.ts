@@ -90,7 +90,7 @@ export class UsersService {
             pricePerDay: true,
           },
         },
-        user: {
+        farmer: {
           select: {
             id: true,
             firstName: true,
