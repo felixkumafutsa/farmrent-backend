@@ -51,6 +51,151 @@ export class UsersService {
     });
   }
 
+  // Vendor analytics - track orders and products
+  async getVendorAnalytics(vendorId: string) {
+    const vendor = await this.prisma.user.findUnique({
+      where: { id: vendorId, role: 'VENDOR' },
+    });
+
+    if (!vendor) {
+      throw new NotFoundException('Vendor not found');
+    }
+
+    // Count vendor's equipment (products)
+    const equipmentCount = await this.prisma.equipment.count({
+      where: { vendorId },
+    });
+
+    // Count vendor's bookings (orders)
+    const bookingCount = await this.prisma.booking.count({
+      where: {
+        equipment: {
+          vendorId,
+        },
+      },
+    });
+
+    // Get recent bookings
+    const recentBookings = await this.prisma.booking.findMany({
+      where: {
+        equipment: {
+          vendorId,
+        },
+      },
+      include: {
+        equipment: {
+          select: {
+            id: true,
+            name: true,
+            pricePerDay: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 10,
+    });
+
+    // Calculate total revenue
+    const totalRevenue = await this.prisma.booking.aggregate({
+      where: {
+        equipment: {
+          vendorId,
+        },
+        status: 'COMPLETED',
+      },
+      _sum: {
+        totalPrice: true,
+      },
+    });
+
+    return {
+      vendor: {
+        id: vendor.id,
+        firstName: vendor.firstName,
+        lastName: vendor.lastName,
+        email: vendor.email,
+        role: vendor.role,
+      },
+      stats: {
+        totalEquipment: equipmentCount,
+        totalBookings: bookingCount,
+        totalRevenue: totalRevenue._sum.totalPrice || 0,
+        completedBookings: await this.prisma.booking.count({
+          where: {
+            equipment: { vendorId },
+            status: 'COMPLETED',
+          },
+        }),
+        pendingBookings: await this.prisma.booking.count({
+          where: {
+            equipment: { vendorId },
+            status: 'PENDING',
+          },
+        }),
+      },
+      recentBookings,
+    };
+  }
+
+  // Get all vendors with their stats
+  async getAllVendorsWithStats() {
+    const vendors = await this.prisma.user.findMany({
+      where: { role: 'VENDOR' },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    // Get stats for each vendor
+    const vendorsWithStats = await Promise.all(
+      vendors.map(async (vendor) => {
+        const [equipmentCount, bookingCount, revenueData] = await Promise.all([
+          this.prisma.equipment.count({
+            where: { vendorId: vendor.id },
+          }),
+          this.prisma.booking.count({
+            where: {
+              equipment: { vendorId: vendor.id },
+            },
+          }),
+          this.prisma.booking.aggregate({
+            where: {
+              equipment: { vendorId: vendor.id },
+              status: 'COMPLETED',
+            },
+            _sum: { totalPrice: true },
+          }),
+        ]);
+
+        return {
+          ...vendor,
+          stats: {
+            totalEquipment: equipmentCount,
+            totalBookings: bookingCount,
+            totalRevenue: revenueData._sum.totalPrice || 0,
+          },
+        };
+      }),
+    );
+
+    return vendorsWithStats;
+  }
+
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },

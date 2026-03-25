@@ -18,6 +18,20 @@ export class UsersController {
     return this.usersService.findOne(id);
   }
 
+  @Get('vendors/analytics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async getAllVendorsWithStats() {
+    return this.usersService.getAllVendorsWithStats();
+  }
+
+  @Get('vendors/:id/analytics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'VENDOR')
+  async getVendorAnalytics(@Param('id') id: string) {
+    return this.usersService.getVendorAnalytics(id);
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
