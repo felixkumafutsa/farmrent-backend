@@ -24,23 +24,24 @@ export class PaymentService {
       throw new NotFoundException('Booking not found');
     }
 
-    // Create escrow transaction
-    const escrowTransaction = await this.prisma.escrowTransaction.create({
+    // Create payment record first (required for escrow transaction)
+    const payment = await this.prisma.payment.create({
       data: {
         bookingId,
-        amount: booking.totalPrice, // Use booking price as escrow amount
+        amount: booking.totalPrice,
+        transactionRef: `TXN-${Date.now()}`,
         provider,
         status: 'PENDING',
       },
     });
 
-    // Create payment record
-    const payment = await this.prisma.payment.create({
+    // Create escrow transaction linked to payment
+    const escrowTransaction = await this.prisma.escrowTransaction.create({
       data: {
-        bookingId,
+        paymentId: payment.id,
         amount: booking.totalPrice,
-        transactionRef: escrowTransaction.id,
-        status: 'PENDING',
+        commission: 0,
+        netAmount: 0,
       },
     });
 
@@ -56,11 +57,15 @@ export class PaymentService {
     const escrowTransaction = await this.prisma.escrowTransaction.findUnique({
       where: { id: escrowTransactionId },
       include: {
-        booking: {
+        payment: {
           include: {
-            equipment: {
+            booking: {
               include: {
-                vendor: true,
+                equipment: {
+                  include: {
+                    vendor: true,
+                  },
+                },
               },
             },
           },
@@ -72,8 +77,8 @@ export class PaymentService {
       throw new NotFoundException('Escrow transaction not found');
     }
 
-    if (escrowTransaction.status !== 'PENDING') {
-      throw new BadRequestException('Payment can only be released from pending transactions');
+    if (escrowTransaction.isReleased) {
+      throw new BadRequestException('Payment already released');
     }
 
     // Calculate commission (5%)
@@ -84,7 +89,7 @@ export class PaymentService {
     const updatedTransaction = await this.prisma.escrowTransaction.update({
       where: { id: escrowTransactionId },
       data: {
-        status: 'RELEASED',
+        isReleased: true,
         commission,
         netAmount,
         releasedAt: new Date(),
@@ -93,16 +98,16 @@ export class PaymentService {
 
     // Update payment status
     await this.prisma.payment.update({
-      where: { transactionRef: escrowTransactionId },
+      where: { id: escrowTransaction.paymentId },
       data: {
-        status: 'COMPLETED',
+        status: 'SUCCESSFUL',
       },
     });
 
     // Create payout record for vendor
     const payout = await this.prisma.payout.create({
       data: {
-        vendorId: escrowTransaction.booking.equipment.vendorId,
+        vendorId: escrowTransaction.payment.booking.equipment.vendorId,
         amount: netAmount,
         status: 'COMPLETED',
       },
@@ -120,11 +125,27 @@ export class PaymentService {
   async getAllEscrowTransactions() {
     return this.prisma.escrowTransaction.findMany({
       include: {
-        booking: {
+        payment: {
           include: {
-            equipment: {
+            booking: {
               include: {
-                vendor: {
+                equipment: {
+                  include: {
+                    vendor: {
+                      select: {
+                        id: true,
+                        user: {
+                          select: {
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+                farmer: {
                   select: {
                     id: true,
                     firstName: true,
@@ -132,14 +153,6 @@ export class PaymentService {
                     email: true,
                   },
                 },
-              },
-            },
-            farmer: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
               },
             },
           },
@@ -165,22 +178,26 @@ export class PaymentService {
   async getPendingEscrowTransactions() {
     return this.prisma.escrowTransaction.findMany({
       where: {
-        status: 'PENDING',
+        isReleased: false,
       },
       include: {
-        booking: {
+        payment: {
           include: {
-            equipment: {
+            booking: {
               include: {
-                vendor: true,
-              },
-            },
-            farmer: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
+                equipment: {
+                  include: {
+                    vendor: true,
+                  },
+                },
+                farmer: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                  },
+                },
               },
             },
           },
